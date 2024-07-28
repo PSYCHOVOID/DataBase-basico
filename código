@@ -1,0 +1,148 @@
+import sqlite3
+import os
+
+class Database:
+    def __init__(self, db_name='cadastro.db'):
+        # Conecta ao banco de dados ou cria um novo
+        self.conn = sqlite3.connect(db_name)
+        self.create_tables()
+    
+    def create_tables(self):
+        # Cria as tabelas 'pessoa' e 'investimento' no banco de dados
+        cursor = self.conn.cursor()
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pessoa (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            cpf TEXT NOT NULL UNIQUE,
+            telefone TEXT
+        )
+        ''')
+        
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS investimento (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pessoa_id INTEGER,
+            tipo TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data TEXT NOT NULL,
+            FOREIGN KEY (pessoa_id) REFERENCES pessoa (id)
+        )
+        ''')
+        
+        self.conn.commit()
+    
+    def inserir_pessoa(self, nome, cpf, telefone):
+        # Insere uma nova pessoa na tabela 'pessoa'
+        cursor = self.conn.cursor()
+        cursor.execute('''
+        INSERT INTO pessoa (nome, cpf, telefone)
+        VALUES (?, ?, ?)
+        ''', (nome, cpf, telefone))
+        self.conn.commit()
+    
+    def inserir_investimento(self, pessoa_id, tipo, valor, data):
+        # Insere um novo investimento na tabela 'investimento'
+        cursor = self.conn.cursor()
+        cursor.execute('''
+        INSERT INTO investimento (pessoa_id, tipo, valor, data)
+        VALUES (?, ?, ?, ?)
+        ''', (pessoa_id, tipo, valor, data))
+        self.conn.commit()
+    
+    def consultar_pessoas(self):
+        # Consulta todas as pessoas cadastradas na tabela 'pessoa'
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM pessoa')
+        return cursor.fetchall()
+    
+    def consultar_investimentos(self, pessoa_id):
+        # Consulta todos os investimentos de uma pessoa específica na tabela 'investimento'
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM investimento WHERE pessoa_id = ?', (pessoa_id,))
+        return cursor.fetchall()
+    
+    def close(self):
+        # Fecha a conexão com o banco de dados
+        self.conn.close()
+
+class Pessoa:
+    def __init__(self, nome, cpf, telefone):
+        # Inicializa uma nova instância da classe Pessoa
+        self.nome = nome
+        self.cpf = cpf
+        self.telefone = telefone
+
+class Investimento:
+    def __init__(self, pessoa_id, tipo, valor, data):
+        # Inicializa uma nova instância da classe Investimento
+        self.pessoa_id = pessoa_id
+        self.tipo = tipo
+        self.valor = valor
+        self.data = data
+
+def main():
+    # Exibe o nome da empresa
+    print("Bem-vindo ao TechSync Investments Technology Bank!")
+    db = Database()
+
+    while True:
+        # Exibe o menu de opções
+        print("\nMenu:")
+        print("1. Cadastrar pessoa")
+        print("2. Adicionar investimento")
+        print("3. Consultar pessoas")
+        print("4. Consultar investimentos de uma pessoa")
+        print("5. Sair")
+
+        
+        choice = input("Escolha uma opção: ")
+        
+        if choice == '1':
+            # Solicita dados para cadastrar uma nova pessoa
+            nome = input("Nome: ")
+            cpf = input("CPF: ")
+            telefone = input("Telefone: ")
+            db.inserir_pessoa(nome, cpf, telefone)
+            print("Pessoa cadastrada com sucesso!")
+            os.system("cls")
+        
+        elif choice == '2':
+            # Solicita dados para adicionar um novo investimento
+            pessoa_id = int(input("ID da pessoa: "))
+            tipo = input("Tipo de investimento: ")
+            valor = float(input("Valor do investimento: "))
+            data = input("Data do investimento (YYYY-MM-DD): ")
+            db.inserir_investimento(pessoa_id, tipo, valor, data)
+            print("Investimento adicionado com sucesso!")
+            os.system("cls")
+        
+        elif choice == '3':
+            # Consulta e exibe todas as pessoas cadastradas
+            pessoas = db.consultar_pessoas()
+            print("\nPessoas cadastradas:")
+            for pessoa in pessoas:
+                print(pessoa)
+
+    
+        elif choice == '4':
+            # Consulta e exibe todos os investimentos de uma pessoa específica
+            pessoa_id = int(input("ID da pessoa: "))
+            investimentos = db.consultar_investimentos(pessoa_id)
+            print("\nInvestimentos da pessoa com ID", pessoa_id)
+            for investimento in investimentos:
+                print(investimento)
+
+        elif choice == '5':
+            # Encerra o programa
+            db.close()
+            print("Obrigado por usar o TechSync Investments Technology Bank!")
+            break
+           
+        else:
+            # Informa ao usuário que a opção é inválida
+            print("Opção inválida. Tente novamente.")
+            os.system("cls")
+
+if __name__ == "__main__":
+    main()
