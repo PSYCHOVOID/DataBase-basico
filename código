@@ -1,15 +1,15 @@
-import sqlite3
-import os
-import hashlib
-import getpass
+import sqlite3 #SQL integrado ao python
+import os #usado para limpar tela
+import hashlib #criptografia
+import getpass #segurança de senha
 
-class Database:
-    def __init__(self, db_name='cadastro.db'):
+class Database: #definir classe
+    def __init__(self, db_name='cadastro.db'): #construtor da classe
         # Conecta ao banco de dados ou cria um novo
-        self.conn = sqlite3.connect(db_name)
+        self.conn = sqlite3.connect(db_name) #atributos
         self.create_tables()
      
-    def create_tables(self):
+    def create_tables(self): #métodos
         # Cria as tabelas 'pessoa' e 'investimento' no banco de dados
         cursor = self.conn.cursor()
         cursor.execute('''
@@ -170,4 +170,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
