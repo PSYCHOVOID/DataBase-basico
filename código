@@ -1,12 +1,14 @@
 import sqlite3
 import os
+import hashlib
+import getpass
 
 class Database:
     def __init__(self, db_name='cadastro.db'):
         # Conecta ao banco de dados ou cria um novo
         self.conn = sqlite3.connect(db_name)
         self.create_tables()
-    
+     
     def create_tables(self):
         # Cria as tabelas 'pessoa' e 'investimento' no banco de dados
         cursor = self.conn.cursor()
@@ -14,8 +16,9 @@ class Database:
         CREATE TABLE IF NOT EXISTS pessoa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
-            cpf TEXT NOT NULL UNIQUE,
-            telefone TEXT
+            email TEXT NOT NULL UNIQUE,
+            telefone TEXT,
+            senha TEXT NOT NULL
         )
         ''')
         
@@ -32,13 +35,14 @@ class Database:
         
         self.conn.commit()
     
-    def inserir_pessoa(self, nome, cpf, telefone):
+    def inserir_pessoa(self, nome, email, telefone, senha):
         # Insere uma nova pessoa na tabela 'pessoa'
         cursor = self.conn.cursor()
+        senha_hash = hashlib.sha256(senha.encode()).hexdigest()
         cursor.execute('''
-        INSERT INTO pessoa (nome, cpf, telefone)
-        VALUES (?, ?, ?)
-        ''', (nome, cpf, telefone))
+        INSERT INTO pessoa (nome, email, telefone, senha)
+        VALUES (?, ?, ?, ?)
+        ''', (nome, email, telefone, senha_hash))
         self.conn.commit()
     
     def inserir_investimento(self, pessoa_id, tipo, valor, data):
@@ -53,7 +57,7 @@ class Database:
     def consultar_pessoas(self):
         # Consulta todas as pessoas cadastradas na tabela 'pessoa'
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM pessoa')
+        cursor.execute('SELECT id, nome, email, telefone FROM pessoa')
         return cursor.fetchall()
     
     def consultar_investimentos(self, pessoa_id):
@@ -62,16 +66,25 @@ class Database:
         cursor.execute('SELECT * FROM investimento WHERE pessoa_id = ?', (pessoa_id,))
         return cursor.fetchall()
     
+    def autenticar_usuario(self, email, senha):
+        # Autentica o usuário com base no email e senha
+        cursor = self.conn.cursor()
+        senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+        cursor.execute('SELECT id FROM pessoa WHERE email = ? AND senha = ?', (email, senha_hash))
+        result = cursor.fetchone()
+        return result
+    
     def close(self):
         # Fecha a conexão com o banco de dados
         self.conn.close()
 
 class Pessoa:
-    def __init__(self, nome, cpf, telefone):
+    def __init__(self, nome, email, telefone, senha):
         # Inicializa uma nova instância da classe Pessoa
         self.nome = nome
-        self.cpf = cpf
+        self.email = email
         self.telefone = telefone
+        self.senha = senha
 
 class Investimento:
     def __init__(self, pessoa_id, tipo, valor, data):
@@ -94,28 +107,34 @@ def main():
         print("3. Consultar pessoas")
         print("4. Consultar investimentos de uma pessoa")
         print("5. Sair")
-
         
         choice = input("Escolha uma opção: ")
         
         if choice == '1':
             # Solicita dados para cadastrar uma nova pessoa
             nome = input("Nome: ")
-            cpf = input("CPF: ")
+            email = input("Email: ")
             telefone = input("Telefone: ")
-            db.inserir_pessoa(nome, cpf, telefone)
+            senha = getpass.getpass("Senha: ")
+            db.inserir_pessoa(nome, email, telefone, senha)
             print("Pessoa cadastrada com sucesso!")
             os.system("cls")
         
         elif choice == '2':
             # Solicita dados para adicionar um novo investimento
-            pessoa_id = int(input("ID da pessoa: "))
-            tipo = input("Tipo de investimento: ")
-            valor = float(input("Valor do investimento: "))
-            data = input("Data do investimento (YYYY-MM-DD): ")
-            db.inserir_investimento(pessoa_id, tipo, valor, data)
-            print("Investimento adicionado com sucesso!")
-            os.system("cls")
+            email = input("Email da pessoa: ")
+            senha = getpass.getpass("Senha: ")
+            usuario = db.autenticar_usuario(email, senha)
+            if usuario:
+                pessoa_id = usuario[0]
+                tipo = input("Tipo de investimento: ")
+                valor = float(input("Valor do investimento: "))
+                data = input("Data do investimento (YYYY-MM-DD): ")
+                db.inserir_investimento(pessoa_id, tipo, valor, data)
+                print("Investimento adicionado com sucesso!")
+                os.system("cls")
+            else:
+                print("Usuário ou senha inválidos!")
         
         elif choice == '3':
             # Consulta e exibe todas as pessoas cadastradas
@@ -123,15 +142,20 @@ def main():
             print("\nPessoas cadastradas:")
             for pessoa in pessoas:
                 print(pessoa)
-
     
         elif choice == '4':
             # Consulta e exibe todos os investimentos de uma pessoa específica
-            pessoa_id = int(input("ID da pessoa: "))
-            investimentos = db.consultar_investimentos(pessoa_id)
-            print("\nInvestimentos da pessoa com ID", pessoa_id)
-            for investimento in investimentos:
-                print(investimento)
+            email = input("Email da pessoa: ")
+            senha = getpass.getpass("Senha: ")
+            usuario = db.autenticar_usuario(email, senha)
+            if usuario:
+                pessoa_id = usuario[0]
+                investimentos = db.consultar_investimentos(pessoa_id)
+                print("\nInvestimentos da pessoa com ID", pessoa_id)
+                for investimento in investimentos:
+                    print(investimento)
+            else:
+                print("Usuário ou senha inválidos!")
 
         elif choice == '5':
             # Encerra o programa
@@ -146,3 +170,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
