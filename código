@@ -1,174 +1,216 @@
-import sqlite3 #SQL integrado ao python
-import os #usado para limpar tela
-import hashlib #criptografia
-import getpass #segurança de senha
+import os
+import sqlite3
+import time
 
-class Database: #definir classe
-    def __init__(self, db_name='cadastro.db'): #construtor da classe
-        # Conecta ao banco de dados ou cria um novo
-        self.conn = sqlite3.connect(db_name) #atributos
+class Livro:
+    def __init__(self, isbn, titulo, autor, disponivel=True):
+        self.isbn = isbn
+        self.titulo = titulo
+        self.autor = autor
+        self.disponivel = disponivel
+
+    def emprestar(self):
+        if self.disponivel:
+            self.disponivel = False
+            return True
+        return False
+
+    def devolver(self):
+        if not self.disponivel:
+            self.disponivel = True
+            return True
+        return False
+
+    def __str__(self):
+        status = "Disponível" if self.disponivel else "Indisponível"
+        return f"ISBN: {self.isbn}, Título: {self.titulo}, Autor: {self.autor}, Status: {status}"
+
+
+class Usuario:
+    def __init__(self, id_usuario, nome):
+        self.id_usuario = id_usuario
+        self.nome = nome
+        self.livros_emprestados = []
+
+    def pegar_livro(self, livro):
+        if livro.emprestar():
+            self.livros_emprestados.append(livro)
+            return True
+        return False
+
+    def devolver_livro(self, livro):
+        if livro.devolver():
+            self.livros_emprestados.remove(livro)
+            return True
+        return False
+
+    def __str__(self):
+        livros = ', '.join(livro.titulo for livro in self.livros_emprestados)
+        return f"ID: {self.id_usuario}, Nome: {self.nome}, Livros Emprestados: {livros}"
+
+
+class Biblioteca:
+    def __init__(self):
+        self.conn = sqlite3.connect('biblioteca.db')
+        self.cursor = self.conn.cursor()
         self.create_tables()
-     
-    def create_tables(self): #métodos
-        # Cria as tabelas 'pessoa' e 'investimento' no banco de dados
-        cursor = self.conn.cursor()
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS pessoa (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            telefone TEXT,
-            senha TEXT NOT NULL
-        )
-        ''')
-        
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS investimento (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pessoa_id INTEGER,
-            tipo TEXT NOT NULL,
-            valor REAL NOT NULL,
-            data TEXT NOT NULL,
-            FOREIGN KEY (pessoa_id) REFERENCES pessoa (id)
-        )
-        ''')
-        
+
+    def create_tables(self):
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS livros (
+            isbn TEXT PRIMARY KEY,
+            titulo TEXT NOT NULL,
+            autor TEXT NOT NULL,
+            disponivel INTEGER NOT NULL
+        )''')
+
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id_usuario INTEGER PRIMARY KEY,
+            nome TEXT NOT NULL
+        )''')
+
         self.conn.commit()
-    
-    def inserir_pessoa(self, nome, email, telefone, senha):
-        # Insere uma nova pessoa na tabela 'pessoa'
-        cursor = self.conn.cursor()
-        senha_hash = hashlib.sha256(senha.encode()).hexdigest()
-        cursor.execute('''
-        INSERT INTO pessoa (nome, email, telefone, senha)
-        VALUES (?, ?, ?, ?)
-        ''', (nome, email, telefone, senha_hash))
+
+    def adicionar_livro(self, livro):
+        self.cursor.execute('''
+        INSERT OR REPLACE INTO livros (isbn, titulo, autor, disponivel) VALUES (?, ?, ?, ?)
+        ''', (livro.isbn, livro.titulo, livro.autor, int(livro.disponivel)))
         self.conn.commit()
-    
-    def inserir_investimento(self, pessoa_id, tipo, valor, data):
-        # Insere um novo investimento na tabela 'investimento'
-        cursor = self.conn.cursor()
-        cursor.execute('''
-        INSERT INTO investimento (pessoa_id, tipo, valor, data)
-        VALUES (?, ?, ?, ?)
-        ''', (pessoa_id, tipo, valor, data))
+
+    def adicionar_usuario(self, usuario):
+        self.cursor.execute('''
+        INSERT OR REPLACE INTO usuarios (id_usuario, nome) VALUES (?, ?)
+        ''', (usuario.id_usuario, usuario.nome))
         self.conn.commit()
-    
-    def consultar_pessoas(self):
-        # Consulta todas as pessoas cadastradas na tabela 'pessoa'
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT id, nome, email, telefone FROM pessoa')
-        return cursor.fetchall()
-    
-    def consultar_investimentos(self, pessoa_id):
-        # Consulta todos os investimentos de uma pessoa específica na tabela 'investimento'
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM investimento WHERE pessoa_id = ?', (pessoa_id,))
-        return cursor.fetchall()
-    
-    def autenticar_usuario(self, email, senha):
-        # Autentica o usuário com base no email e senha
-        cursor = self.conn.cursor()
-        senha_hash = hashlib.sha256(senha.encode()).hexdigest()
-        cursor.execute('SELECT id FROM pessoa WHERE email = ? AND senha = ?', (email, senha_hash))
-        result = cursor.fetchone()
-        return result
-    
+
+    def emprestar_livro(self, isbn, id_usuario):
+        livro = self.buscar_livro(isbn)
+        usuario = self.buscar_usuario(id_usuario)
+
+        if livro and usuario:
+            if livro.emprestar():
+                self.cursor.execute('UPDATE livros SET disponivel = ? WHERE isbn = ?', (0, isbn))
+                self.conn.commit()
+                print(f"Livro '{livro.titulo}' emprestado com sucesso para {usuario.nome}.")
+            else:
+                print(f"Livro '{livro.titulo}' não está disponível para emprestimo.")
+        else:
+            print("Livro ou usuário não encontrado.")
+
+    def devolver_livro(self, isbn, id_usuario):
+        livro = self.buscar_livro(isbn)
+        usuario = self.buscar_usuario(id_usuario)
+
+        if livro and usuario:
+            if livro.devolver():
+                self.cursor.execute('UPDATE livros SET disponivel = ? WHERE isbn = ?', (1, isbn))
+                self.conn.commit()
+                print(f"Livro '{livro.titulo}' devolvido com sucesso por {usuario.nome}.")
+            else:
+                print(f"Livro '{livro.titulo}' não foi emprestado por {usuario.nome}.")
+        else:
+            print("Livro ou usuário não encontrado.")
+
+    def listar_livros(self):
+        self.cursor.execute('SELECT * FROM livros')
+        livros = self.cursor.fetchall()
+        for livro in livros:
+            livro_obj = Livro(livro[0], livro[1], livro[2], bool(livro[3]))
+            print(livro_obj)
+
+    def listar_usuarios(self):
+        self.cursor.execute('SELECT * FROM usuarios')
+        usuarios = self.cursor.fetchall()
+        for usuario in usuarios:
+            usuario_obj = Usuario(usuario[0], usuario[1])
+            print(usuario_obj)
+
+    def buscar_livro(self, isbn):
+        self.cursor.execute('SELECT * FROM livros WHERE isbn = ?', (isbn,))
+        livro = self.cursor.fetchone()
+        if livro:
+            return Livro(livro[0], livro[1], livro[2], bool(livro[3]))
+        return None
+
+    def buscar_usuario(self, id_usuario):
+        self.cursor.execute('SELECT * FROM usuarios WHERE id_usuario = ?', (id_usuario,))
+        usuario = self.cursor.fetchone()
+        if usuario:
+            return Usuario(usuario[0], usuario[1])
+        return None
+
     def close(self):
-        # Fecha a conexão com o banco de dados
         self.conn.close()
 
-class Pessoa:
-    def __init__(self, nome, email, telefone, senha):
-        # Inicializa uma nova instância da classe Pessoa
-        self.nome = nome
-        self.email = email
-        self.telefone = telefone
-        self.senha = senha
 
-class Investimento:
-    def __init__(self, pessoa_id, tipo, valor, data):
-        # Inicializa uma nova instância da classe Investimento
-        self.pessoa_id = pessoa_id
-        self.tipo = tipo
-        self.valor = valor
-        self.data = data
+def limpar_tela():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-def main():
-    # Exibe o nome da empresa
-    print("Bem-vindo ao TechSync Investments Technology Bank!")
-    db = Database()
+
+def menu():
+    biblioteca = Biblioteca()
 
     while True:
-        # Exibe o menu de opções
-        print("\nMenu:")
-        print("1. Cadastrar pessoa")
-        print("2. Adicionar investimento")
-        print("3. Consultar pessoas")
-        print("4. Consultar investimentos de uma pessoa")
-        print("5. Sair")
-        
-        choice = input("Escolha uma opção: ")
-        
-        if choice == '1':
-            # Solicita dados para cadastrar uma nova pessoa
-            nome = input("Nome: ")
-            email = input("Email: ")
-            telefone = input("Telefone: ")
-            senha = getpass.getpass("Senha: ")
-            db.inserir_pessoa(nome, email, telefone, senha)
-            print("Pessoa cadastrada com sucesso!")
-            os.system("cls")
-        
-        elif choice == '2':
-            # Solicita dados para adicionar um novo investimento
-            email = input("Email da pessoa: ")
-            senha = getpass.getpass("Senha: ")
-            usuario = db.autenticar_usuario(email, senha)
-            if usuario:
-                pessoa_id = usuario[0]
-                tipo = input("Tipo de investimento: ")
-                valor = float(input("Valor do investimento: "))
-                data = input("Data do investimento (YYYY-MM-DD): ")
-                db.inserir_investimento(pessoa_id, tipo, valor, data)
-                print("Investimento adicionado com sucesso!")
-                os.system("cls")
-            else:
-                print("Usuário ou senha inválidos!")
-        
-        elif choice == '3':
-            # Consulta e exibe todas as pessoas cadastradas
-            pessoas = db.consultar_pessoas()
-            print("\nPessoas cadastradas:")
-            for pessoa in pessoas:
-                print(pessoa)
-    
-        elif choice == '4':
-            # Consulta e exibe todos os investimentos de uma pessoa específica
-            email = input("Email da pessoa: ")
-            senha = getpass.getpass("Senha: ")
-            usuario = db.autenticar_usuario(email, senha)
-            if usuario:
-                pessoa_id = usuario[0]
-                investimentos = db.consultar_investimentos(pessoa_id)
-                print("\nInvestimentos da pessoa com ID", pessoa_id)
-                for investimento in investimentos:
-                    print(investimento)
-            else:
-                print("Usuário ou senha inválidos!")
+        limpar_tela()
+        print("\n1. Adicionar Livro")
+        print("2. Adicionar Usuário")
+        print("3. Emprestar Livro")
+        print("4. Devolver Livro")
+        print("5. Listar Livros")
+        print("6. Listar Usuários")
+        print("7. Sair")
 
-        elif choice == '5':
-            # Encerra o programa
-            db.close()
-            print("Obrigado por usar o TechSync Investments Technology Bank!")
+        opcao = input("Escolha uma opção: ")
+
+        if opcao == '1':
+            isbn = input("ISBN: ")
+            titulo = input("Título: ")
+            autor = input("Autor: ")
+            livro = Livro(isbn, titulo, autor)
+            biblioteca.adicionar_livro(livro)
+            print("Livro adicionado com sucesso!")
+            time.sleep(2)  # Pausa para que o usuário possa ver a mensagem
+
+        elif opcao == '2':
+            id_usuario = int(input("ID do Usuário: "))
+            nome = input("Nome: ")
+            usuario = Usuario(id_usuario, nome)
+            biblioteca.adicionar_usuario(usuario)
+            print("Usuário adicionado com sucesso!")
+            time.sleep(2)  # Pausa para que o usuário possa ver a mensagem
+
+        elif opcao == '3':
+            isbn = input("ISBN do Livro: ")
+            id_usuario = int(input("ID do Usuário: "))
+            biblioteca.emprestar_livro(isbn, id_usuario)
+            time.sleep(2)  # Pausa para que o usuário possa ver a mensagem
+
+        elif opcao == '4':
+            isbn = input("ISBN do Livro: ")
+            id_usuario = int(input("ID do Usuário: "))
+            biblioteca.devolver_livro(isbn, id_usuario)
+            time.sleep(2)  # Pausa para que o usuário possa ver a mensagem
+
+        elif opcao == '5':
+            print("Livros na biblioteca:")
+            biblioteca.listar_livros()
+            input("Pressione Enter para continuar...")
+            
+        elif opcao == '6':
+            print("Usuários cadastrados:")
+            biblioteca.listar_usuarios()
+            input("Pressione Enter para continuar...")
+
+        elif opcao == '7':
+            biblioteca.close()
+            print("Saindo...")
             break
-           
+
         else:
-            # Informa ao usuário que a opção é inválida
             print("Opção inválida. Tente novamente.")
-            os.system("cls")
+            time.sleep(2)  # Pausa para que o usuário possa ver a mensagem
 
 if __name__ == "__main__":
-    main()
-
+    menu()
 
